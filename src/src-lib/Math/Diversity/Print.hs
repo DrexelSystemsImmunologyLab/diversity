@@ -41,50 +41,40 @@ printDiversity label order window positionMap = header ++ body
 -- Return the results of the rarefaction analysis in string form for saving
 -- to a file
 printRarefaction :: Bool
-                 -> Bool
-                 -> Int
-                 -> Int
-                 -> Int
-                 -> Int
                  -> Double
                  -> Label
                  -> Window
                  -> PositionMap
                  -> IO String
 printRarefaction
-    bySample fastBin runs start interval end g label window positionMap = do
+    bySample g label window positionMap = do
     body <- fmap unlines . mapM mapLine . Map.toAscList $ positionMap
     return (header ++ body)
   where
-    header           = "label,window,position,weight,percent_above,\
-                       \additional_sampling,g_proportion,richness,S_est\n"
+    header           = "label,window,position,weight,\
+                       \additional_sampling,g_proportion,richness,\
+                       \S_est,S_est_var\n"
     mapLine (p, xs)  = fmap (intercalate ",") . line p $ xs
     line p xs        = do
-        curve   <- getRarefactionCurve bySample xs
         -- The minimum number of samples needed before any additional
         -- sampling returns less than the threshold (min) number of species
         return [ label
                , show window
                , show p
                , show . Map.foldl' (+) 0 $ xs
-               , show . rarefactionViable . map (snd . snd) $ curve
                , show . additionalSampling bySample $ xs
                , show g
                , show . sobs $ xs
                , show . sest bySample $ xs
+               , show . var bySample $ xs
                ]
     sest True xs  = sobs xs + chao2 xs
     sest False xs = sobs xs + chao1 xs
+    var True      = chao2Var
+    var False     = chao1Var
     sobs = fromIntegral . richness
     additionalSampling True  = sampleG g
     additionalSampling False = individualG g
-    getRarefactionCurve True = rarefactionSampleCurve fastBin start interval end
-    getRarefactionCurve False = rarefactionCurve
-                                fastBin
-                                runs
-                                (fromIntegral start)
-                                (fromIntegral interval)
-                                (fromIntegral end)
 
 -- Return the results of the rarefaction analysis of the entire curve in
 -- string form for saving to a file
@@ -105,9 +95,9 @@ printRarefactionCurve
 
     return (header asDF ++ body)
   where
-    header False      = "label,window,position,weight,expected_richness,\
-                        \mad\n"
-    header True       = "label,window,position,weight,subsample,\
+    header False      = "label,window,position,weight,percent_above,\
+                        \expected_richness,mad\n"
+    header True       = "label,window,position,weight,percent_above,subsample,\
                         \expected_richness,mad\n"
     mapLine (!p, !xs) = line asDF p xs
     line False p xs   = do
@@ -116,6 +106,10 @@ printRarefactionCurve
                                    , show window
                                    , show p
                                    , show . Map.foldl' (+) 0 $ xs
+                                   , show
+                                   . rarefactionViable
+                                   . map (snd . snd)
+                                   $ curve
                                    , intercalate "/"
                                    . map (show . fst . snd)
                                    $ curve
@@ -131,6 +125,10 @@ printRarefactionCurve
                                         , show window
                                         , show p
                                         , show . Map.foldl' (+) 0 $ xs
+                                        , show
+                                        . rarefactionViable
+                                        . map (snd . snd)
+                                        $ curve
                                         , show x
                                         , show y
                                         , show z

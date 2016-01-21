@@ -28,10 +28,12 @@ data Options = Options { inputLabel             :: String
                        , inputWindow            :: Int
                        , inputFasta             :: String
                        , inputSampleField       :: Int
+                       , inputCountField        :: Int
                        , inputSubsampling       :: String
                        , inputG                 :: Double
                        , fastBin                :: Bool
                        , runs                   :: Int
+                       , gapsFlag               :: Bool
                        , removeNBool            :: Bool
                        , wholeSeq               :: Bool
                        , list                   :: Bool
@@ -78,6 +80,17 @@ options = Options
          <> value 1
          <> help "The index for the sample ID in the header separated by '|'\
                  \ (1 indexed)" )
+      <*> option auto
+          ( long "input-count-field"
+         <> short 'C'
+         <> metavar "INT"
+         <> value 0
+         <> help "The index for the number of this type in the header separated\
+                 \ by '|' (1 indexed). Used if there are multiple copies\
+                 \ of one entry, so a '4' in the header would indicate that\
+                 \ this entity occurred 4 times. Defaults to 0, meaning that\
+                 \ this field is ignored and count each sequence as occurring\
+                 \ just once" )
       <*> strOption
           ( long "input-subsampling"
          <> short 'I'
@@ -118,6 +131,13 @@ options = Options
                  \ this many runs. If this value is not 0, empirical\
                  \ rarefaction is automatically enabled (individual based only,\
                  \ not for sample based)" )
+      <*> switch
+          ( long "keep-gaps"
+         <> short 'G'
+         <> help "Do not remove '.' and '-' characters from the analysis. This\
+                 \ flag will thus treat these characters as additional entities\
+                 \ rather than be ignored as artificial biological gaps in\
+                 \ a sequence" )
       <*> switch
           ( long "remove-N"
          <> short 'n'
@@ -168,7 +188,7 @@ options = Options
          <> metavar "FILE"
          <> value ""
          <> help "The csv file containing the diversities at each position.\
-                 \ expects a string, so you need a string wven with std" )
+                 \ expects a string, so you need a string even with std" )
 
 parseSampling :: (Num a, Read a) => String -> [a]
 parseSampling = map read . parsing . words
@@ -186,8 +206,10 @@ pipesPositionMap opts = do
           $ P.fromHandle h
         >-> toFastaSequence (list opts) h
         >-> P.map ( generatePositionMap
+                    (gapsFlag opts)
                     (sample opts)
                     (inputSampleField opts)
+                    (inputCountField opts)
                     (wholeSeq opts)
                     (inputWindow opts)
                   . removals )
@@ -218,11 +240,6 @@ generateDiversity opts = do
          $ do
             s <- printRarefaction
                  (sample opts)
-                 (fastBin opts)
-                 (runs opts)
-                 start
-                 interval
-                 end
                  (inputG opts)
                  label
                  window
@@ -248,5 +265,4 @@ main = execParser opts >>= generateDiversity
   where
     opts = info (helper <*> options)
       ( fullDesc
-     <> progDesc "Return the diversity at each position for all sequences in a\
-                 \ fasta file" )
+     <> progDesc "Quantify the diversity of a population" )
