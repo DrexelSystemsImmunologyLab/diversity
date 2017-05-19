@@ -12,10 +12,11 @@ import qualified Data.Map.Strict as Map
 import qualified System.IO as IO
 
 -- Cabal
-import Options.Applicative
+import Data.Semigroup ((<>))
 import Data.Fasta.String
 import Pipes
 import qualified Pipes.Prelude as P
+import Options.Applicative
 
 -- Local
 import Math.Diversity.Types
@@ -26,7 +27,7 @@ import Math.Diversity.Print
 data Options = Options { inputLabel             :: String
                        , inputOrder             :: Double
                        , inputWindow            :: Int
-                       , inputFasta             :: String
+                       , inputFasta             :: Maybe String
                        , inputSampleField       :: Int
                        , inputCountField        :: Int
                        , inputSubsampling       :: String
@@ -58,21 +59,21 @@ options = Options
       <*> option auto
           ( long "input-order"
          <> short 'r'
-         <> metavar "[1]|INT"
+         <> metavar "[1] | INT"
          <> value 1
          <> help "The order of true diversity" )
       <*> option auto
           ( long "input-window"
          <> short 'w'
-         <> metavar "[1]|INT"
+         <> metavar "[1] | INT"
          <> value 1
          <> help "The length of the sliding window for generating fragments" )
-      <*> strOption
+      <*> optional ( strOption
           ( long "input-fasta"
          <> short 'i'
-         <> metavar "FILE"
-         <> value ""
+         <> metavar "[Nothing] | FILE"
          <> help "The fasta file containing the germlines and clones" )
+        )
       <*> option auto
           ( long "input-sample-field"
          <> short 'S'
@@ -165,7 +166,9 @@ options = Options
           ( long "std"
          <> short 't'
          <> help "Whether to output to stdout or to a file if no file is\
-                 \ supplied" )
+                 \ supplied. Must still put some string in -O, -c, or -o\
+                 \ depending on which output is needed."
+          )
       <*> strOption
           ( long "output-rarefaction"
          <> short 'O'
@@ -198,9 +201,9 @@ parseSampling = map read . parsing . words
 
 pipesPositionMap :: Options -> IO PositionMap
 pipesPositionMap opts = do
-    h <- if null . inputFasta $ opts
-            then return IO.stdin
-            else IO.openFile (inputFasta opts) IO.ReadMode
+    h <- case inputFasta opts of
+            Nothing  -> return IO.stdin
+            (Just x) -> IO.openFile x IO.ReadMode
     runEffect
           $ P.fold (Map.unionWith (Map.unionWith (+))) Map.empty id
           $ P.fromHandle h
@@ -265,4 +268,4 @@ main = execParser opts >>= generateDiversity
   where
     opts = info (helper <*> options)
       ( fullDesc
-     <> progDesc "Quantify the diversity of a population" )
+     <> progDesc "Quantify the diversity of a population." )
